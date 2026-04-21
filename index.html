@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CellScope — Interactive Organelle Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#0a0e1a;--bg2:#0f1525;--bg3:#151d35;
+  --surface:#1a2340;--surface2:#1f2a4a;
+  --accent:#4fffb0;--accent2:#7eb8ff;--accent3:#ff7eb8;
+  --text:#e8edf8;--text2:#8a9abf;--text3:#5a6a8f;
+  --border:rgba(78,130,255,0.15);--border2:rgba(79,255,176,0.2);
+  --r:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background:radial-gradient(ellipse 80% 50% at 20% 20%,rgba(79,255,176,0.04) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 40% at 80% 80%,rgba(126,184,255,0.05) 0%,transparent 60%);
+  pointer-events:none;z-index:0;}
+body::after{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(79,255,176,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(79,255,176,0.025) 1px,transparent 1px);
+  background-size:60px 60px;pointer-events:none;z-index:0;}
+.wrapper{position:relative;z-index:1;}
+
+/* ── NAV ── */
+nav{display:flex;align-items:center;justify-content:space-between;padding:1rem 2rem;border-bottom:1px solid var(--border);background:rgba(10,14,26,0.92);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100;}
+.nav-logo{display:flex;align-items:center;gap:10px;font-family:'DM Serif Display',serif;font-size:21px;color:var(--text);text-decoration:none;}
+.dot{width:9px;height:9px;background:var(--accent);border-radius:50%;box-shadow:0 0 10px var(--accent);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.nav-right{display:flex;align-items:center;gap:10px;}
+.nav-badge{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);border:1px solid rgba(79,255,176,0.3);padding:3px 10px;border-radius:20px;background:rgba(79,255,176,0.05);}
+.nav-stats{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);}
+
+/* ── HERO ── */
+.hero{text-align:center;padding:4rem 2rem 2.5rem;max-width:720px;margin:0 auto;}
+.hero-label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.15em;color:var(--accent);text-transform:uppercase;margin-bottom:1.2rem;display:flex;align-items:center;justify-content:center;gap:8px;}
+.hero-label::before,.hero-label::after{content:'';width:32px;height:1px;background:linear-gradient(90deg,transparent,var(--accent));}
+.hero-label::after{transform:scaleX(-1);}
+.hero h1{font-family:'DM Serif Display',serif;font-size:clamp(34px,5.5vw,58px);line-height:1.1;color:var(--text);margin-bottom:1rem;}
+.hero h1 em{font-style:italic;color:var(--accent);}
+.hero p{font-size:15px;color:var(--text2);line-height:1.75;margin-bottom:2.5rem;max-width:500px;margin-left:auto;margin-right:auto;}
+
+/* ── SEARCH ── */
+.search-container{max-width:560px;margin:0 auto 1.5rem;}
+.search-wrap{display:flex;align-items:center;background:var(--surface);border:1px solid var(--border2);border-radius:50px;padding:6px 6px 6px 20px;gap:10px;transition:border-color .2s,box-shadow .2s;}
+.search-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px rgba(79,255,176,0.08);}
+.search-icon{color:var(--text3);font-size:16px;flex-shrink:0;}
+#searchInput{flex:1;background:none;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);min-width:0;}
+#searchInput::placeholder{color:var(--text3);}
+#searchBtn{background:var(--accent);color:#0a0e1a;border:none;border-radius:50px;padding:10px 24px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s,transform .1s;white-space:nowrap;}
+#searchBtn:hover{background:#3de89d;}
+#searchBtn:active{transform:scale(.97);}
+
+/* ── CHIPS ── */
+.chips-wrap{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:720px;margin:0 auto 3rem;padding:0 1rem;}
+.chip{font-family:'JetBrains Mono',monospace;font-size:11px;padding:5px 12px;border:1px solid var(--border);border-radius:20px;color:var(--text2);cursor:pointer;background:rgba(255,255,255,0.02);transition:all .15s;}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(79,255,176,0.06);}
+.chip.active{border-color:var(--accent);color:var(--accent);background:rgba(79,255,176,0.1);}
+
+/* ── LOADING ── */
+#loading{display:none;text-align:center;padding:3rem;}
+#loading.visible{display:block;}
+.spinner{width:44px;height:44px;border:2px solid var(--surface2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 1rem;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{color:var(--text2);font-size:13px;font-family:'JetBrains Mono',monospace;}
+
+/* ── ERROR ── */
+#errorBox{display:none;max-width:500px;margin:0 auto 2rem;background:rgba(255,126,184,0.08);border:1px solid rgba(255,126,184,0.25);border-radius:var(--r);padding:1rem 1.25rem;color:#ff7eb8;font-size:14px;text-align:center;}
+#errorBox.visible{display:block;}
+
+/* ── RESULT ── */
+#resultArea{display:none;max-width:860px;margin:0 auto;padding:0 1.5rem 5rem;animation:fadeUp .4s ease;}
+#resultArea.visible{display:block;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── TOP GRID: image + header ── */
+.top-grid{display:grid;grid-template-columns:320px 1fr;gap:1rem;margin-bottom:1rem;}
+@media(max-width:680px){.top-grid{grid-template-columns:1fr;}}
+
+/* ── IMAGE CARD ── */
+.img-card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;}
+.img-frame{position:relative;width:100%;height:260px;background:var(--bg3);overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.img-frame img{width:100%;height:100%;object-fit:cover;transition:transform .5s ease;}
+.img-frame img:hover{transform:scale(1.06);}
+.img-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(10,14,26,0.7) 0%,transparent 50%);pointer-events:none;}
+.img-badge{position:absolute;top:10px;right:10px;background:rgba(10,14,26,0.75);border:1px solid var(--border2);border-radius:20px;padding:3px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);backdrop-filter:blur(8px);}
+.img-caption{padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.img-caption a{color:var(--accent2);text-decoration:none;font-size:9px;}
+.img-caption a:hover{text-decoration:underline;}
+
+/* ── ORG HEADER CARD ── */
+.org-header{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:1.5rem 1.75rem;display:flex;flex-direction:column;justify-content:center;gap:10px;}
+.org-eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--accent);text-transform:uppercase;}
+.org-title{font-family:'DM Serif Display',serif;font-size:32px;color:var(--text);line-height:1.15;}
+.org-tags{display:flex;gap:7px;flex-wrap:wrap;}
+.otag{font-size:11px;font-weight:500;padding:4px 12px;border-radius:20px;}
+.otag.animal{background:rgba(255,126,184,0.12);color:#ff7eb8;border:1px solid rgba(255,126,184,0.25);}
+.otag.plant{background:rgba(79,255,176,0.1);color:var(--accent);border:1px solid rgba(79,255,176,0.25);}
+.otag.both{background:rgba(126,184,255,0.1);color:var(--accent2);border:1px solid rgba(126,184,255,0.25);}
+.otag.prokaryote{background:rgba(255,200,79,0.1);color:#ffc84f;border:1px solid rgba(255,200,79,0.25);}
+
+/* ── STATS STRIP ── */
+.stats-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 0;}
+.stat-item{text-align:center;padding:8px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);}
+.stat-val{font-family:'DM Serif Display',serif;font-size:22px;color:var(--text);display:block;}
+.stat-lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;}
+
+/* ── FUN FACT ── */
+.fun-fact-card{background:linear-gradient(135deg,rgba(79,255,176,0.06),rgba(126,184,255,0.05));border:1px solid rgba(79,255,176,0.18);border-radius:var(--r);padding:1rem 1.25rem;margin-bottom:1rem;display:flex;gap:12px;align-items:flex-start;}
+.ff-icon{font-size:22px;flex-shrink:0;margin-top:1px;}
+.ff-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px;}
+.ff-text{font-size:13.5px;color:var(--text2);line-height:1.65;}
+
+/* ── INFO GRID ── */
+.info-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem 1.75rem;margin-bottom:1rem;}
+.card-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--text3);text-transform:uppercase;margin-bottom:1rem;display:flex;align-items:center;gap:8px;}
+.card-label::after{content:'';flex:1;height:1px;background:var(--border);}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+@media(max-width:560px){.info-grid{grid-template-columns:1fr;}}
+.info-para{padding:.9rem 1.1rem .9rem 0;border-bottom:1px solid var(--border);}
+.info-para:nth-child(odd){border-right:1px solid var(--border);}
+.info-para:nth-child(even){padding-left:1.1rem;padding-right:0;}
+.info-para:nth-last-child(-n+2){border-bottom:none;}
+@media(max-width:560px){.info-para:nth-child(odd){border-right:none;}.info-para:nth-child(even){padding-left:0;}.info-para:nth-last-child(2){border-bottom:1px solid var(--border);}}
+.info-para-num{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent);margin-bottom:5px;opacity:.7;text-transform:uppercase;letter-spacing:.08em;}
+.info-para p{font-size:13.5px;color:var(--text2);line-height:1.8;}
+
+/* ── QUIZ ── */
+.quiz-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem 1.75rem;margin-bottom:1rem;}
+.quiz-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px;}
+.quiz-title-row{display:flex;align-items:center;gap:10px;}
+.quiz-title{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--text3);text-transform:uppercase;}
+.score-pill{background:rgba(79,255,176,0.1);border:1px solid rgba(79,255,176,0.25);border-radius:20px;padding:5px 14px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent);display:none;}
+.score-pill.visible{display:inline-block;}
+.score-bar-wrap{display:none;margin-top:6px;}
+.score-bar-wrap.visible{display:block;}
+.score-bar-bg{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;}
+.score-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .6s ease;}
+.quiz-q{margin-bottom:1rem;padding:1.1rem 1.2rem;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);transition:border-color .2s;}
+.quiz-q.answered{border-color:rgba(79,255,176,0.12);}
+.q-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.q-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);background:rgba(79,255,176,0.1);border:1px solid rgba(79,255,176,0.2);padding:2px 9px;border-radius:20px;}
+.q-type-badge{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);background:var(--surface2);padding:2px 8px;border-radius:20px;}
+.q-text{font-size:14px;font-weight:500;color:var(--text);margin-bottom:10px;line-height:1.55;}
+.options{display:flex;flex-direction:column;gap:5px;}
+.opt{display:flex;align-items:center;gap:10px;padding:9px 13px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--surface);font-size:13px;color:var(--text2);transition:all .15s;user-select:none;}
+.opt:hover:not([data-locked]){border-color:rgba(79,255,176,0.4);color:var(--text);background:rgba(79,255,176,0.04);}
+.opt.correct{border-color:var(--accent)!important;background:rgba(79,255,176,0.09)!important;color:var(--accent)!important;}
+.opt.wrong{border-color:rgba(255,126,184,0.5)!important;background:rgba(255,126,184,0.06)!important;color:#ff7eb8!important;}
+.opt-letter{width:20px;height:20px;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-family:'JetBrains Mono',monospace;flex-shrink:0;color:var(--text3);}
+.short-row{display:flex;gap:8px;align-items:center;}
+.short-input{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 13px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none;transition:border-color .15s;}
+.short-input:focus{border-color:rgba(79,255,176,0.4);}
+.check-btn{background:rgba(79,255,176,0.1);border:1px solid rgba(79,255,176,0.25);color:var(--accent);padding:9px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;white-space:nowrap;transition:all .15s;}
+.check-btn:hover{background:rgba(79,255,176,0.18);}
+.q-feedback{margin-top:7px;font-size:11.5px;font-family:'JetBrains Mono',monospace;display:none;padding:6px 10px;border-radius:6px;}
+.q-feedback.visible{display:block;}
+.q-feedback.ok{color:var(--accent);background:rgba(79,255,176,0.06);}
+.q-feedback.no{color:#ff7eb8;background:rgba(255,126,184,0.06);}
+.quiz-actions{display:flex;gap:10px;margin-top:1rem;align-items:center;flex-wrap:wrap;}
+.answers-toggle{background:none;border:1px solid var(--border);color:var(--text2);padding:8px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.answers-toggle:hover{border-color:rgba(79,255,176,0.3);color:var(--text);}
+.answers-box{display:none;margin-top:1rem;padding:1.1rem 1.25rem;background:rgba(79,255,176,0.03);border:1px solid rgba(79,255,176,0.12);border-radius:var(--r);}
+.answers-box.visible{display:block;}
+.ans-item{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2);display:flex;gap:10px;line-height:1.6;}
+.ans-item:last-child{border-bottom:none;}
+.ans-num{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--accent);min-width:22px;margin-top:2px;}
+
+/* ── GALLERY SECTION ── */
+.gallery-section{margin-bottom:1rem;}
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+.gallery-thumb{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:pointer;aspect-ratio:1;background:var(--bg3);transition:border-color .2s,transform .2s;}
+.gallery-thumb:hover{border-color:var(--accent);transform:translateY(-2px);}
+.gallery-thumb img{width:100%;height:100%;object-fit:cover;}
+.gallery-thumb-label{position:absolute;bottom:0;left:0;right:0;padding:5px 8px;background:rgba(10,14,26,0.8);font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);}
+
+/* ── FOOTER ── */
+footer{text-align:center;padding:2.5rem 1rem;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);position:relative;z-index:1;line-height:2;}
+footer a{color:var(--accent2);text-decoration:none;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}
+
+/* ── RESPONSIVE ── */
+@media(max-width:500px){
+  nav{padding:.8rem 1rem;}
+  .nav-stats{display:none;}
+  .hero{padding:2.5rem 1rem 2rem;}
+  #resultArea{padding:0 .75rem 3rem;}
+}
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#"><div class="dot"></div>CellScope</a>
+  <div class="nav-right">
+    <span class="nav-stats">18 organelles · 90 quiz questions</span>
+    <div class="nav-badge">Biology v3.0</div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">Interactive Biology Learning</div>
+  <h1>Explore the <em>Living</em> Cell</h1>
+  <p>Search any cell organelle to see its real microscope image, detailed science, and test your knowledge with a quiz.</p>
+  <div class="search-container">
+    <div class="search-wrap">
+      <span class="search-icon">🔬</span>
+      <input type="text" id="searchInput" placeholder="Try: mitochondria, nucleus, chloroplast..." autocomplete="off"/>
+      <button id="searchBtn" onclick="explore()">Explore →</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHIPS -->
+<div class="chips-wrap" id="chipsWrap"></div>
+
+<!-- LOADING / ERROR -->
+<div id="loading"><div class="spinner"></div><p id="loadingMsg">Loading organelle data...</p></div>
+<div id="errorBox"></div>
+
+<!-- RESULT -->
+<div id="resultArea">
+
+  <!-- TOP: image + header -->
+  <div class="top-grid">
+    <div class="img-card">
+      <div class="img-frame">
+        <img id="orgImage" src="" alt="Organelle image" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Cell_membrane_detailed_diagram_en.svg/600px-Cell_membrane_detailed_diagram_en.svg.png'"/>
+        <div class="img-overlay"></div>
+        <div class="img-badge" id="imgBadge">Microscopy Image</div>
+      </div>
+      <div class="img-caption">
+        <span id="imgCaption">Scientific illustration</span>
+        <a id="imgSource" href="#" target="_blank">Source ↗</a>
+      </div>
+    </div>
+
+    <div class="org-header">
+      <div class="org-eyebrow">Cell Organelle</div>
+      <div class="org-title" id="rName"></div>
+      <div class="org-tags" id="rTags"></div>
+      <div class="stats-strip" id="rStats"></div>
+    </div>
+  </div>
+
+  <!-- FUN FACT -->
+  <div class="fun-fact-card">
+    <div class="ff-icon">⚡</div>
+    <div><span class="ff-label">Did you know?</span><span class="ff-text" id="rFunFact"></span></div>
+  </div>
+
+  <!-- INFO -->
+  <div class="info-card">
+    <div class="card-label">Detailed information</div>
+    <div class="info-grid" id="rInfoGrid"></div>
+  </div>
+
+  <!-- QUIZ -->
+  <div class="quiz-card">
+    <div class="quiz-header">
+      <div class="quiz-title-row">
+        <span class="quiz-title">Knowledge check — 5 questions</span>
+      </div>
+      <div class="score-pill" id="scorePill">Score: 0 / 5</div>
+    </div>
+    <div class="score-bar-wrap" id="scoreBarWrap">
+      <div class="score-bar-bg"><div class="score-bar-fill" id="scoreBarFill" style="width:0%"></div></div>
+    </div>
+    <div id="quizContainer" style="margin-top:1rem;"></div>
+    <div class="quiz-actions">
+      <button class="answers-toggle" id="answersToggleBtn" onclick="toggleAnswers()">Show all answers</button>
+    </div>
+    <div class="answers-box" id="answersBox"></div>
+  </div>
+
+</div><!-- end resultArea -->
+
+<footer>
+  CellScope — Interactive Biology Learning Platform &nbsp;·&nbsp; Built for students worldwide<br>
+  Images sourced from <a href="https://commons.wikimedia.org" target="_blank">Wikimedia Commons</a> (public domain &amp; CC licensed)
+</footer>
+</div><!-- end wrapper -->
+
+<script>
+// ── ORGANELLE IMAGE DATABASE ─────────────────────────────────────────────────
+// All images from Wikimedia Commons (public domain / CC licensed — safe for offline use)
+const IMAGES = {
+  "nucleus": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Diagram_human_cell_nucleus.svg/600px-Diagram_human_cell_nucleus.svg.png",
+    caption: "Diagram of a human cell nucleus", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Diagram_human_cell_nucleus.svg"
+  },
+  "mitochondria": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Mitochondria%2C_mammalian_lung_-_TEM_%282%29.jpg/600px-Mitochondria%2C_mammalian_lung_-_TEM_%282%29.jpg",
+    caption: "TEM of mammalian lung mitochondria", badge: "Electron Microscopy", source: "https://commons.wikimedia.org/wiki/File:Mitochondria,_mammalian_lung_-_TEM_(2).jpg"
+  },
+  "ribosome": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/Ribosome_shape.png/600px-Ribosome_shape.png",
+    caption: "Ribosome structure diagram", badge: "Structure Diagram", source: "https://commons.wikimedia.org/wiki/File:Ribosome_shape.png"
+  },
+  "chloroplast": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Chloroplast_II.svg/600px-Chloroplast_II.svg.png",
+    caption: "Chloroplast cross-section diagram", badge: "Cross-section", source: "https://commons.wikimedia.org/wiki/File:Chloroplast_II.svg"
+  },
+  "golgi apparatus": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Golgi_apparatus_%28borderless_version%29-en.svg/600px-Golgi_apparatus_%28borderless_version%29-en.svg.png",
+    caption: "Golgi apparatus structure diagram", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Golgi_apparatus_(borderless_version)-en.svg"
+  },
+  "lysosome": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Endomembrane_system_diagram_en.svg/600px-Endomembrane_system_diagram_en.svg.png",
+    caption: "Lysosome in the endomembrane system", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Endomembrane_system_diagram_en.svg"
+  },
+  "vacuole": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Vacuole_Diagram.png/600px-Vacuole_Diagram.png",
+    caption: "Vacuole structure diagram", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Vacuole_Diagram.png"
+  },
+  "cell membrane": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/Cell_membrane_detailed_diagram_en.svg/600px-Cell_membrane_detailed_diagram_en.svg.png",
+    caption: "Detailed cell membrane diagram", badge: "Fluid Mosaic Model", source: "https://commons.wikimedia.org/wiki/File:Cell_membrane_detailed_diagram_en.svg"
+  },
+  "cell wall": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Plant_cell_wall_diagram.svg/600px-Plant_cell_wall_diagram.svg.png",
+    caption: "Plant cell wall structure", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Plant_cell_wall_diagram.svg"
+  },
+  "cytoplasm": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Animal_cell_structure_en.svg/600px-Animal_cell_structure_en.svg.png",
+    caption: "Animal cell showing cytoplasm", badge: "Cell Diagram", source: "https://commons.wikimedia.org/wiki/File:Animal_cell_structure_en.svg"
+  },
+  "centrosome": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Centriole-en.svg/600px-Centriole-en.svg.png",
+    caption: "Centriole / centrosome diagram", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Centriole-en.svg"
+  },
+  "peroxisome": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Animal_cell_structure_en.svg/600px-Animal_cell_structure_en.svg.png",
+    caption: "Peroxisome in animal cell context", badge: "Cell Diagram", source: "https://commons.wikimedia.org/wiki/File:Animal_cell_structure_en.svg"
+  },
+  "chromatin": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/Chromatin_Structures.png/600px-Chromatin_Structures.png",
+    caption: "Chromatin structure — DNA to chromosome", badge: "Structure Diagram", source: "https://commons.wikimedia.org/wiki/File:Chromatin_Structures.png"
+  },
+  "cilia": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Bronchiolar_epithelium_3_-_SEM.jpg/600px-Bronchiolar_epithelium_3_-_SEM.jpg",
+    caption: "SEM of cilia on bronchiolar epithelium", badge: "Scanning Electron Microscopy", source: "https://commons.wikimedia.org/wiki/File:Bronchiolar_epithelium_3_-_SEM.jpg"
+  },
+  "flagella": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Flagella.png/600px-Flagella.png",
+    caption: "Flagella types — diagram", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Flagella.png"
+  },
+  "vesicle": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Nucleus_ER_golgi.svg/600px-Nucleus_ER_golgi.svg.png",
+    caption: "Vesicle budding from ER to Golgi", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Nucleus_ER_golgi.svg"
+  },
+  "nucleolus": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Diagram_human_cell_nucleus.svg/600px-Diagram_human_cell_nucleus.svg.png",
+    caption: "Nucleolus inside the cell nucleus", badge: "Nucleus Diagram", source: "https://commons.wikimedia.org/wiki/File:Diagram_human_cell_nucleus.svg"
+  },
+  "endoplasmic reticulum": {
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Nucleus_ER_golgi.svg/600px-Nucleus_ER_golgi.svg.png",
+    caption: "ER, Golgi and Nucleus relationship", badge: "Diagram", source: "https://commons.wikimedia.org/wiki/File:Nucleus_ER_golgi.svg"
+  }
+};
+
+// ── ALIAS MAP ─────────────────────────────────────────────────────────────────
+const ALIASES={
+  "mitochondrion":"mitochondria","ribosomes":"ribosome","er":"endoplasmic reticulum",
+  "rough er":"endoplasmic reticulum","smooth er":"endoplasmic reticulum",
+  "rough endoplasmic reticulum":"endoplasmic reticulum","smooth endoplasmic reticulum":"endoplasmic reticulum",
+  "golgi":"golgi apparatus","golgi body":"golgi apparatus","golgi complex":"golgi apparatus",
+  "lysosomes":"lysosome","vacuoles":"vacuole","plasma membrane":"cell membrane",
+  "flagellum":"flagella","vesicles":"vesicle","centriole":"centrosome","centrioles":"centrosome",
+  "chloroplasts":"chloroplast","peroxisomes":"peroxisome","rna":"ribosome"
+};
+
+// ── FULL DATABASE ─────────────────────────────────────────────────────────────
+const DB = {
+  nucleus:{
+    name:"Nucleus", found_in:["animal","plant"],
+    stats:[{val:"6µm",lbl:"Diameter"},{val:"46",lbl:"Chromosomes"},{val:"2m",lbl:"DNA Length"}],
+    fun_fact:"The human nucleus packages about 2 metres of DNA into a space just 6 micrometres wide — equivalent to stuffing a 40 km rope into a tennis ball!",
+    info:[
+      "The nucleus is the largest and most important organelle in most eukaryotic cells. Often called the 'control centre' or 'brain' of the cell, it stores and manages all genetic information and coordinates every cellular activity.",
+      "The nucleus is enclosed by a double membrane called the nuclear envelope. This structure is studded with thousands of nuclear pore complexes — tiny gateways that carefully regulate the transport of molecules between the nucleus and the cytoplasm.",
+      "Inside the nucleus, DNA is organised into chromosomes. In human cells, there are 46 chromosomes carrying approximately 25,000 genes. When the cell is not dividing, the DNA exists as loosely wound chromatin; before cell division it coils tightly into visible chromosomes.",
+      "The nucleus directs protein synthesis by transcribing DNA into messenger RNA (mRNA). The mRNA then travels through nuclear pores to ribosomes in the cytoplasm, where it serves as the blueprint for building specific proteins.",
+      "An important secondary role is DNA repair. The nucleus contains specialised enzymes that constantly scan the DNA for errors or damage caused by radiation, chemicals, or replication mistakes, correcting them to maintain genetic integrity.",
+      "In animal cells, the nucleus typically sits near the centre. In plant cells, the large central vacuole often pushes it to the edge. The nucleus is present in all eukaryotic cells but absent in prokaryotes like bacteria, which have a simpler nucleoid region.",
+      "Think of the nucleus as the head office of a company. All the important blueprints (DNA) are kept locked in this office, and photocopies of instructions (mRNA) are sent out to the workers (ribosomes) on the factory floor (cytoplasm).",
+      "When the nucleus malfunctions, the consequences are severe. Mutations in nuclear DNA can lead to cancer, genetic disorders, or cell death. Drugs like doxorubicin (a chemotherapy agent) work by interfering with the nucleus's ability to replicate DNA."
+    ],
+    quiz:[
+      {type:"mcq",question:"What double membrane surrounds the nucleus?",options:["A) Cell membrane","B) Nuclear envelope","C) Tonoplast","D) Thylakoid membrane"],correct:"B) Nuclear envelope"},
+      {type:"mcq",question:"How many chromosomes are found in a normal human cell?",options:["A) 23","B) 46","C) 92","D) 24"],correct:"B) 46"},
+      {type:"short",question:"Why is the nucleus called the 'control centre' of the cell?",correct:"Because it stores DNA and directs all cell activities by sending mRNA instructions to ribosomes for protein synthesis."},
+      {type:"mcq",question:"What structures in the nuclear envelope control transport in and out?",options:["A) Ribosomes","B) Cristae","C) Nuclear pores","D) Plasmodesmata"],correct:"C) Nuclear pores"},
+      {type:"short",question:"What happens if the nucleus is removed from a cell?",correct:"The cell cannot make proteins, repair DNA, or divide, and will eventually die within days."}
+    ]
+  },
+  mitochondria:{
+    name:"Mitochondria", found_in:["animal","plant"],
+    stats:[{val:"1–10µm",lbl:"Size"},{val:"38",lbl:"ATP/Glucose"},{val:"37°C",lbl:"Optimal Temp"}],
+    fun_fact:"Mitochondria have their own separate DNA, strongly suggesting they were once free-living bacteria that were engulfed by a larger cell over 1.5 billion years ago — a process called endosymbiosis!",
+    info:[
+      "Mitochondria are often called the 'powerhouse of the cell' because they generate most of the cell's energy in the form of ATP (adenosine triphosphate). They are found in almost all eukaryotic cells and are absolutely essential for aerobic life.",
+      "Each mitochondrion is surrounded by two membranes. The smooth outer membrane acts as a boundary, while the inner membrane is dramatically folded into shelf-like structures called cristae, which massively increase the surface area available for chemical reactions.",
+      "The space enclosed by the inner membrane is called the matrix. It contains a concentrated mixture of enzymes, mitochondrial DNA (mtDNA), ribosomes, and the raw materials for the Krebs cycle, one of the main stages of cellular respiration.",
+      "Mitochondria produce ATP through cellular respiration — a process that combines glucose with oxygen. The process involves glycolysis (in the cytoplasm), the Krebs cycle (in the matrix), and the electron transport chain (on the cristae), yielding up to 38 ATP per glucose molecule.",
+      "Beyond energy production, mitochondria also regulate intracellular calcium levels, control the cell cycle, produce heat (especially in brown fat cells), and are central to apoptosis — the controlled self-destruction of damaged or unnecessary cells.",
+      "Mitochondria are found throughout the cytoplasm and are especially numerous in cells with high energy demands — heart muscle cells can contain over 5,000 mitochondria each. Cells that need less energy, like fat cells, have far fewer.",
+      "Imagine mitochondria as the power stations of a city. They take in fuel (glucose) and convert it into usable electrical energy (ATP) that powers everything else in the city (cell). Without them, the whole city would shut down.",
+      "Mitochondrial diseases — caused by mutations in mtDNA or nuclear genes encoding mitochondrial proteins — include conditions like Leigh syndrome, MELAS, and mitochondrial myopathy. Since mtDNA is maternally inherited, these diseases pass through the mother."
+    ],
+    quiz:[
+      {type:"mcq",question:"What are the folded inner membrane structures of mitochondria called?",options:["A) Grana","B) Thylakoids","C) Cristae","D) Lamellae"],correct:"C) Cristae"},
+      {type:"mcq",question:"What is the main energy currency produced by mitochondria?",options:["A) DNA","B) ATP","C) NADH","D) Glucose"],correct:"B) ATP"},
+      {type:"short",question:"Why do heart muscle cells have thousands of mitochondria?",correct:"Heart muscle cells contract continuously and require enormous amounts of ATP, so they need many mitochondria to meet their constant energy demands."},
+      {type:"mcq",question:"Which process occurs in the mitochondrial matrix?",options:["A) Glycolysis","B) Krebs cycle","C) Light reactions","D) Transcription"],correct:"B) Krebs cycle"},
+      {type:"short",question:"What evidence suggests mitochondria were once free-living bacteria?",correct:"Mitochondria have their own circular DNA, their own ribosomes, and reproduce by binary fission — just like bacteria."}
+    ]
+  },
+  ribosome:{
+    name:"Ribosome", found_in:["animal","plant"],
+    stats:[{val:"20–30nm",lbl:"Size"},{val:"80S",lbl:"Eukaryote"},{val:"Millions",lbl:"Per Cell"}],
+    fun_fact:"A ribosome can add about 15–20 amino acids per second to a growing protein chain. At that speed, it could build a 300-amino-acid protein in under 20 seconds!",
+    info:[
+      "Ribosomes are the smallest yet most abundant organelles in all living cells — found in bacteria, plants, animals, and every other form of life. They are the molecular machines responsible for protein synthesis.",
+      "Each ribosome is made of two subunits — a large subunit and a small subunit — each composed of ribosomal RNA (rRNA) and ribosomal proteins. In eukaryotic cells, ribosomes are classified as 80S; prokaryotic ribosomes are smaller at 70S.",
+      "Unlike most organelles, ribosomes have no surrounding membrane. They are essentially naked molecular machines. Their core is made largely of rRNA, which not only provides structure but also catalyses the chemical reactions of protein synthesis.",
+      "The function of ribosomes is translation — reading the sequence of codons on a messenger RNA (mRNA) molecule and assembling the corresponding chain of amino acids to form a specific protein required by the cell.",
+      "Ribosomes can work either as free ribosomes floating in the cytoplasm (making proteins for internal use) or as bound ribosomes attached to the rough endoplasmic reticulum (making proteins destined for secretion or membrane insertion).",
+      "Ribosomes are found in astronomically large numbers — a single liver cell may contain up to 13 million ribosomes. They are also present inside mitochondria and chloroplasts, where they make proteins for those organelles.",
+      "Think of ribosomes as 3D printers in the cell. The mRNA is the digital file (program), and the ribosome reads it to print out the physical product (protein) from the raw materials (amino acids) delivered by tRNA.",
+      "Because bacterial ribosomes (70S) differ structurally from eukaryotic ribosomes (80S), many vital antibiotics — including streptomycin, erythromycin, and tetracycline — specifically target the bacterial ribosome without harming human cells."
+    ],
+    quiz:[
+      {type:"mcq",question:"What process do ribosomes carry out?",options:["A) Transcription","B) Replication","C) Translation","D) Photosynthesis"],correct:"C) Translation"},
+      {type:"mcq",question:"What are the two structural components of a ribosome?",options:["A) Matrix and cristae","B) Large and small subunits","C) Nucleus and cytoplasm","D) rRNA and mRNA"],correct:"B) Large and small subunits"},
+      {type:"short",question:"How do free ribosomes differ from bound ribosomes in function?",correct:"Free ribosomes make proteins for use inside the cell; bound ribosomes on the rER make proteins destined for secretion or membrane insertion."},
+      {type:"mcq",question:"What is the ribosome classification in eukaryotic cells?",options:["A) 50S","B) 70S","C) 80S","D) 30S"],correct:"C) 80S"},
+      {type:"short",question:"Why are ribosomes important targets for antibiotics?",correct:"Bacterial ribosomes (70S) are structurally different from human ribosomes (80S), so antibiotics can target and disable bacterial ribosomes without harming human cells."}
+    ]
+  },
+  chloroplast:{
+    name:"Chloroplast", found_in:["plant"],
+    stats:[{val:"4–8µm",lbl:"Length"},{val:"~50",lbl:"Per Cell"},{val:"6CO₂",lbl:"Fixed/Cycle"}],
+    fun_fact:"Chloroplasts contain their own DNA and reproduce independently inside the cell — evidence that they evolved from ancient photosynthetic bacteria called cyanobacteria that were engulfed over a billion years ago!",
+    info:[
+      "Chloroplasts are organelles found exclusively in plant cells and algae. They are the sites of photosynthesis — the process by which light energy is converted into chemical energy stored as glucose.",
+      "Each chloroplast is surrounded by a double membrane (outer and inner envelope). Inside is a fluid-filled space called the stroma, which contains enzymes, the chloroplast's own circular DNA, and ribosomes similar to those of bacteria.",
+      "Within the stroma are interconnected stacks of membrane discs called thylakoids. A single stack is called a granum (plural: grana). The thylakoid membranes contain chlorophyll and other pigments that absorb light energy.",
+      "Photosynthesis consists of two stages. In the light-dependent reactions (occurring on thylakoid membranes), light energy splits water, releases oxygen, and produces ATP and NADPH. In the Calvin cycle (in the stroma), these products are used to fix CO₂ into glucose.",
+      "Chlorophyll absorbs light most efficiently at red (670 nm) and blue (430 nm) wavelengths, reflecting green light — which is why plants appear green to our eyes. Different accessory pigments (carotenoids, xanthophylls) absorb other wavelengths.",
+      "Chloroplasts are found mainly in the mesophyll cells of leaves. A single mesophyll cell may contain 20–100 chloroplasts. Remarkably, they can reorient themselves within the cell to optimise light capture or protect themselves from too much light.",
+      "Think of chloroplasts as a combined solar panel and kitchen. The solar panel (thylakoid membrane) captures sunlight, and the kitchen (stroma) uses that energy to cook up food (glucose) from simple ingredients — CO₂ from air and water from the soil.",
+      "Chloroplasts are foundational to all life on Earth: they produce the oxygen in our atmosphere and synthesise the organic compounds at the base of every food chain. Without chloroplasts, complex life as we know it could not exist."
+    ],
+    quiz:[
+      {type:"mcq",question:"Where does the Calvin cycle take place in the chloroplast?",options:["A) Thylakoid membrane","B) Outer membrane","C) Stroma","D) Granum"],correct:"C) Stroma"},
+      {type:"mcq",question:"Which pigment makes plants appear green?",options:["A) Carotene","B) Chlorophyll","C) Xanthophyll","D) Anthocyanin"],correct:"B) Chlorophyll"},
+      {type:"short",question:"What are grana and what role do they play in photosynthesis?",correct:"Grana are stacks of thylakoid disc membranes inside the chloroplast where the light-dependent reactions of photosynthesis occur."},
+      {type:"mcq",question:"What gas is released as a by-product of the light-dependent reactions?",options:["A) Carbon dioxide","B) Nitrogen","C) Hydrogen","D) Oxygen"],correct:"D) Oxygen"},
+      {type:"short",question:"What evidence shows chloroplasts evolved from bacteria?",correct:"Chloroplasts have their own circular DNA, prokaryotic-type ribosomes, and reproduce by binary fission — traits inherited from their cyanobacterial ancestors."}
+    ]
+  },
+  "golgi apparatus":{
+    name:"Golgi Apparatus", found_in:["animal","plant"],
+    stats:[{val:"4–8",lbl:"Cisternae"},{val:"~500nm",lbl:"Width"},{val:"1898",lbl:"Discovered"}],
+    fun_fact:"The Golgi apparatus was discovered in 1898 by Camillo Golgi using a silver staining technique. For decades, scientists debated whether it truly existed or was just a staining artefact — it seemed too organised to be real!",
+    info:[
+      "The Golgi apparatus (also called the Golgi body or Golgi complex) is a vital organelle found in all eukaryotic cells. It functions as the cell's post office, packaging and distribution centre — receiving, processing, and dispatching proteins and lipids.",
+      "It consists of a series of flattened, curved membrane-bound sacs called cisternae, typically arranged in stacks of 4–8. The stack has a defined orientation: the cis face (receiving side) faces the endoplasmic reticulum, and the trans face (shipping side) faces the plasma membrane.",
+      "Proteins and lipids arrive from the rough ER in small transport vesicles that fuse with the cis face. As cargo moves through the cisternae from cis to trans, it undergoes a series of chemical modifications — including glycosylation (addition of sugar chains) and phosphorylation.",
+      "These modifications act like postal codes or delivery labels, directing each molecule to its correct final destination. After processing, molecules are packaged into vesicles that bud off the trans face and travel to their destinations.",
+      "The destinations vary widely: some vesicles fuse with the plasma membrane for secretion (exocytosis), others form lysosomes, and others target specific organelles within the cell. This sorting function is critical for cellular organisation.",
+      "The Golgi is especially prominent in secretory cells. Pancreatic acinar cells (which secrete digestive enzymes), plasma cells (secreting antibodies), and goblet cells (secreting mucus) all have strikingly large, active Golgi stacks.",
+      "Imagine the Golgi as a FedEx fulfilment centre. Products (proteins) arrive in lorries (ER vesicles), pass through sorting and labelling stations (cisternae), are put into parcels (vesicles), and dispatched to specific addresses (cell membrane, lysosomes, or outside the cell).",
+      "Golgi dysfunction is linked to neurodegeneration, cancer, and connective tissue disorders. Some viral proteins hijack the Golgi secretory pathway to export viral particles from infected cells — making it a potential drug target."
+    ],
+    quiz:[
+      {type:"mcq",question:"What are the flattened membrane sacs of the Golgi called?",options:["A) Cristae","B) Cisternae","C) Thylakoids","D) Vesicles"],correct:"B) Cisternae"},
+      {type:"mcq",question:"Which face of the Golgi receives vesicles from the ER?",options:["A) Trans face","B) Lateral face","C) Cis face","D) Distal face"],correct:"C) Cis face"},
+      {type:"short",question:"What chemical modification does the Golgi add to many proteins?",correct:"The Golgi adds sugar chains (glycosylation) and phosphate groups to proteins, creating 'address labels' that direct them to their correct destinations."},
+      {type:"mcq",question:"What type of cell would have the largest, most active Golgi apparatus?",options:["A) Red blood cell","B) Muscle cell","C) Pancreatic secretory cell","D) Fat cell"],correct:"C) Pancreatic secretory cell"},
+      {type:"short",question:"What would happen if the Golgi apparatus stopped working?",correct:"Proteins could not be properly modified, sorted, or delivered — lysosomes would not form, secretion would halt, and the cell membrane could not be maintained."}
+    ]
+  },
+  lysosome:{
+    name:"Lysosome", found_in:["animal"],
+    stats:[{val:"0.1–1.2µm",lbl:"Size"},{val:"pH 4.5",lbl:"Internal pH"},{val:"50+",lbl:"Enzymes"}],
+    fun_fact:"Lysosomes are called 'suicide bags' because if their membrane ruptures, they release digestive enzymes that can completely destroy the cell from within — this is actually a controlled mechanism used in programmed cell death!",
+    info:[
+      "Lysosomes are membrane-bound organelles found mainly in animal cells. They function as the cell's waste disposal and recycling system, containing over 50 different types of powerful hydrolytic (digestive) enzymes.",
+      "Each lysosome is a small, spherical vesicle enclosed by a single phospholipid membrane. Inside, the environment is kept strongly acidic (pH around 4.5–5.0) by proton pumps embedded in the membrane. This acidity is essential for enzyme activation.",
+      "The acid environment also serves as a safety mechanism: if a lysosome ruptures and leaks into the neutral cytoplasm (pH ~7.2), the enzymes are inactivated — protecting the cell from accidental self-digestion.",
+      "Lysosomes carry out autophagy — the systematic digestion of aged, damaged, or surplus organelles and proteins within the cell. This process is essential for cellular quality control and is especially important during starvation when cells need to recycle components for energy.",
+      "They also participate in heterophagy — digesting material brought into the cell from outside by endocytosis or phagocytosis. When white blood cells engulf bacteria, lysosomes fuse with the resulting phagosome and destroy the pathogens.",
+      "Lysosomes are formed when vesicles budding from the trans face of the Golgi apparatus (containing hydrolytic enzymes) fuse with early endosomes. They are distributed throughout the cytoplasm but concentrate near the nucleus.",
+      "Think of lysosomes as the cell's waste processing and recycling plant — everything that is old, damaged, or unwanted is sent there to be broken down into reusable molecular building blocks (amino acids, sugars, fatty acids, nucleotides).",
+      "Lysosomal storage diseases — including Tay-Sachs, Gaucher, Niemann-Pick, and Pompe disease — occur when specific lysosomal enzymes are missing or defective, causing toxic accumulation of undigested substrates."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the pH inside a lysosome?",options:["A) 7.4","B) 6.0","C) 4.5","D) 9.0"],correct:"C) 4.5"},
+      {type:"mcq",question:"Which organelle produces lysosomes?",options:["A) Mitochondria","B) Nucleus","C) Rough ER","D) Golgi apparatus"],correct:"D) Golgi apparatus"},
+      {type:"short",question:"What is autophagy and why is it essential?",correct:"Autophagy is the process of digesting old or damaged organelles and proteins inside the cell — essential for quality control, recycling nutrients, and survival during starvation."},
+      {type:"mcq",question:"Why are lysosomes called 'suicide bags'?",options:["A) They absorb sunlight","B) They contain enzymes that can destroy the entire cell if released","C) They cause mutations","D) They block cell division"],correct:"B) They contain enzymes that can destroy the entire cell if released"},
+      {type:"short",question:"How do lysosomes support the immune system?",correct:"Lysosomes fuse with phagosomes (containing engulfed bacteria or debris) and release digestive enzymes to destroy the pathogens inside white blood cells."}
+    ]
+  },
+  vacuole:{
+    name:"Vacuole", found_in:["animal","plant"],
+    stats:[{val:"Up to 90%",lbl:"Cell Volume"},{val:"Tonoplast",lbl:"Membrane"},{val:"Cell Sap",lbl:"Content"}],
+    fun_fact:"In a fully mature plant cell, the central vacuole can occupy up to 90% of the total cell volume — it is so enormous that the nucleus and all other organelles are squashed into a thin layer around the cell edge!",
+    info:[
+      "Vacuoles are membrane-bound storage compartments found in cells. The word 'vacuole' comes from the Latin 'vacuus' meaning empty, but they are far from empty — they can store water, ions, sugars, pigments, waste products, and defensive toxins.",
+      "Vacuoles are enclosed by a specialised membrane called the tonoplast (in plant cells). The aqueous solution inside is called cell sap — a complex mixture of water, dissolved salts, organic acids, sugars, and various other molecules.",
+      "Plant cells typically have one large, permanent central vacuole that dominates the cell's interior. Its primary role is to maintain turgor pressure — the internal hydrostatic pressure that keeps plant cells rigid and gives plants their upright structure.",
+      "When the central vacuole is fully inflated with water, it presses outward against the rigid cell wall, making the cell turgid. When a plant doesn't get enough water, the vacuole shrinks, the cell becomes flaccid, and the plant wilts.",
+      "Plant vacuoles also store pigments — particularly anthocyanins and flavonoids — that give flowers, fruits, and leaves their red, purple, and blue colours. These pigments attract pollinators and help defend against UV radiation.",
+      "Animal cells contain multiple small, temporary vacuoles rather than one large permanent one. Food vacuoles (formed during phagocytosis) temporarily store engulfed food particles for digestion. Contractile vacuoles in freshwater protists pump out excess water.",
+      "Think of the plant vacuole as a water balloon in the centre of the cell. When fully inflated, it pushes against the cell wall, keeping the cell firm — like a fully pumped bicycle tyre. Deflating it causes the plant to wilt, like a flat tyre.",
+      "Vacuoles also play a detoxification role in plants — concentrating and storing toxic alkaloids, tannins, and other defensive chemicals that deter herbivores and pathogens, away from the active cytoplasm."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the membrane surrounding a plant vacuole called?",options:["A) Nuclear envelope","B) Tonoplast","C) Plasma membrane","D) Thylakoid"],correct:"B) Tonoplast"},
+      {type:"mcq",question:"What is the function of a contractile vacuole?",options:["A) Store food","B) Produce energy","C) Pump out excess water","D) Store DNA"],correct:"C) Pump out excess water"},
+      {type:"short",question:"How does the central vacuole prevent plant wilting?",correct:"The water-filled vacuole creates turgor pressure, pressing against the cell wall and keeping cells rigid. Without enough water, the vacuole shrinks and the plant wilts."},
+      {type:"mcq",question:"What gives flowers their red, purple, and blue colours inside vacuoles?",options:["A) Chlorophyll","B) Carotene","C) Anthocyanins","D) Melanin"],correct:"C) Anthocyanins"},
+      {type:"short",question:"How do plant and animal cell vacuoles differ?",correct:"Plant cells have one large permanent central vacuole occupying most of the cell; animal cells have multiple small temporary vacuoles for food storage and other functions."}
+    ]
+  },
+  "cell membrane":{
+    name:"Cell Membrane", found_in:["animal","plant"],
+    stats:[{val:"7–10nm",lbl:"Thickness"},{val:"Fluid",lbl:"State"},{val:"1972",lbl:"Model Year"}],
+    fun_fact:"The cell membrane is not a static wall — it behaves like a 2D fluid where lipids and proteins drift and flow. A single protein can travel the full circumference of the cell in under a minute!",
+    info:[
+      "The cell membrane (plasma membrane) is the universal boundary of all living cells. This thin, flexible, and dynamic structure separates the cell's internal environment from the outside world, controls communication, and manages all traffic in and out of the cell.",
+      "The membrane is built around a phospholipid bilayer — two sheets of phospholipid molecules stacked back-to-back. Each phospholipid has a hydrophilic (water-loving) head that faces outward towards watery environments, and hydrophobic (water-fearing) tails that point inward, away from water.",
+      "Embedded throughout this bilayer are diverse proteins. Integral proteins span the membrane completely and form channels, pumps, or receptors. Peripheral proteins associate loosely with the membrane surface and help with signalling or structural support.",
+      "The fluid mosaic model, proposed by S.J. Singer and Garth Nicolson in 1972, describes this structure as a two-dimensional fluid in which proteins float and move like ships in a sea of lipids. Cholesterol molecules interspersed in the bilayer regulate its fluidity.",
+      "The membrane is selectively permeable — it acts as a gatekeeper. Small, non-polar molecules like oxygen and carbon dioxide freely diffuse across. Water moves by osmosis. Ions and large polar molecules require specific transport proteins to cross.",
+      "The outer surface of the membrane is decorated with carbohydrate chains attached to proteins (glycoproteins) and lipids (glycolipids). These form the glycocalyx — a sugar coat that acts as a cellular identity card, enabling cell recognition and immune responses.",
+      "Think of the cell membrane as a sophisticated national border. Customs officers (transport proteins) check all incoming and outgoing traffic, allowing certain goods (molecules) through while keeping others out. The border itself is always in motion.",
+      "Many diseases target the cell membrane. HIV fuses directly with it to inject genetic material. Cholera toxin opens ion channels, causing catastrophic water loss. Many drugs, including antibiotics and anaesthetics, work by altering membrane permeability or structure."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the structural basis of the cell membrane?",options:["A) Cellulose fibres","B) Protein bilayer","C) Phospholipid bilayer","D) Glycogen matrix"],correct:"C) Phospholipid bilayer"},
+      {type:"mcq",question:"What model describes the cell membrane's structure?",options:["A) Lock and key","B) Induced fit","C) Double helix","D) Fluid mosaic"],correct:"D) Fluid mosaic"},
+      {type:"short",question:"What is the role of cholesterol in the cell membrane?",correct:"Cholesterol inserts between phospholipids to regulate membrane fluidity — preventing it from becoming too rigid in cold temperatures or too fluid in warm ones."},
+      {type:"mcq",question:"What is the glycocalyx and what does it do?",options:["A) A sugar coat on the membrane surface used for cell recognition","B) A protein layer inside the membrane","C) The lipid core of the membrane","D) A DNA-binding complex"],correct:"A) A sugar coat on the membrane surface used for cell recognition"},
+      {type:"short",question:"How does selective permeability protect the cell?",correct:"By allowing only specific molecules to cross, the membrane maintains the correct internal chemical balance (homeostasis) and prevents toxic substances from entering freely."}
+    ]
+  },
+  "cell wall":{
+    name:"Cell Wall", found_in:["plant"],
+    stats:[{val:"0.1–10µm",lbl:"Thickness"},{val:"Cellulose",lbl:"Main Material"},{val:"Permeable",lbl:"Permeability"}],
+    fun_fact:"Wood, cotton, paper, and linen are all made almost entirely from plant cell walls. The cellulose in a single tree trunk represents billions of tonnes of cell wall material built one cell at a time!",
+    info:[
+      "The cell wall is a rigid, protective layer found outside the plasma membrane in plant cells, fungi, bacteria, and most algae. Its primary roles are to provide structural support, maintain cell shape, prevent over-expansion, and protect against mechanical damage.",
+      "In plants, the cell wall is composed primarily of cellulose — long, unbranched chains of glucose monomers arranged in parallel bundles called microfibrils. These microfibrils are extremely strong under tension and are embedded in a matrix of other polysaccharides and proteins.",
+      "Plant cells typically have two types of walls. The primary cell wall is laid down first, is relatively thin and flexible, and allows the growing cell to expand. The secondary cell wall is deposited inside the primary wall once the cell has stopped growing, and is often thickened with lignin for extra rigidity.",
+      "Lignin is a complex organic polymer that makes secondary cell walls exceptionally hard and waterproof. It is responsible for the strength and rigidity of wood. Xylem cells (water-conducting vessels) are particularly heavily lignified.",
+      "Unlike the cell membrane, the cell wall is fully permeable. It does not discriminate between molecules; water, ions, and small proteins pass freely through the porous wall. Its job is purely structural, not regulatory.",
+      "Adjacent plant cells are connected through plasmodesmata — tiny channels that pass through the cell walls of neighbouring cells. These allow the cytoplasm (symplast) of neighbouring cells to be continuous, enabling the exchange of water, nutrients, and signals.",
+      "Think of the cell wall as the outer brick wall of a building, while the cell membrane inside is the building's glass windows — the brick wall provides the rigid structure and shape, while the windows are the selective barriers controlling what passes inside.",
+      "The cell wall interacts with the vacuole to regulate turgor pressure. In a well-watered plant, the vacuole pushes outward and the rigid wall resists, keeping the cell turgid and the plant firm. This is why fresh vegetables are crisp and wilted ones are soft."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the primary structural component of a plant cell wall?",options:["A) Chitin","B) Peptidoglycan","C) Cellulose","D) Lignin"],correct:"C) Cellulose"},
+      {type:"mcq",question:"What connects the cytoplasm of adjacent plant cells through the cell wall?",options:["A) Gap junctions","B) Plasmodesmata","C) Tight junctions","D) Desmosomes"],correct:"B) Plasmodesmata"},
+      {type:"short",question:"What is the difference between the primary and secondary cell wall?",correct:"The primary wall is thin and flexible (allows growth); the secondary wall is thick, often lignified, and forms after growth stops for rigidity and strength."},
+      {type:"mcq",question:"Why is a cell wall described as 'fully permeable'?",options:["A) It allows all molecules to enter the cell","B) It selects specific molecules like the membrane","C) It is made of porous cellulose that lets water and small molecules pass freely","D) It actively pumps ions across"],correct:"C) It is made of porous cellulose that lets water and small molecules pass freely"},
+      {type:"short",question:"Why do fresh vegetables become limp when they lose water?",correct:"Water loss shrinks the vacuole, reducing turgor pressure. Without the vacuole pressing against the cell wall, the cells lose their rigidity, causing the vegetable to become soft and limp."}
+    ]
+  },
+  cytoplasm:{
+    name:"Cytoplasm", found_in:["animal","plant"],
+    stats:[{val:"~70%",lbl:"Water Content"},{val:"pH 7.2",lbl:"Normal pH"},{val:"All",lbl:"Cell Types"}],
+    fun_fact:"The cytoplasm is not just a simple watery solution — it behaves like a non-Newtonian fluid (like cornstarch mixed with water), becoming more solid under stress and more liquid at rest, helping cells resist sudden mechanical damage!",
+    info:[
+      "The cytoplasm is the entire contents of the cell enclosed within the plasma membrane, excluding the nucleus. It is the medium in which all organelles are suspended and in which the vast majority of cellular chemical reactions take place.",
+      "The liquid component of the cytoplasm is called the cytosol — a gel-like aqueous solution containing dissolved ions, sugars, amino acids, proteins, and RNA. Water makes up about 70% of the cytosol by mass.",
+      "Running throughout the cytoplasm is the cytoskeleton — an elaborate network of protein filaments including microtubules (tubulin), microfilaments (actin), and intermediate filaments. This framework gives the cell its shape, supports organelles, and enables movement.",
+      "The cytoplasm is the site of many crucial metabolic pathways, including glycolysis (the first stage of cellular respiration), fatty acid synthesis, and much of the protein synthesis that occurs on free ribosomes.",
+      "An important phenomenon in the cytoplasm is cytoplasmic streaming (or cyclosis) — the directed, circular flow of cytoplasm within the cell. This process actively distributes nutrients, organelles, and proteins throughout the cell, especially important in large plant cells.",
+      "The cytoplasm in eukaryotic cells occupies the space between the plasma membrane and the nuclear envelope. In prokaryotic cells, the cytoplasm fills the entire cell and contains the DNA directly, since there is no nucleus.",
+      "Think of the cytoplasm as the bustling interior of a city — the streets (cytoskeleton), the buildings (organelles), the workers and vehicles (molecules and vesicles), and all the economic activity (metabolism) happen in this space.",
+      "The viscosity of the cytoplasm changes based on cellular conditions. Cells can alter cytoplasmic properties during stress responses — for example, forming protective biomolecular condensates (liquid-like droplets) that sequester damaged proteins, a recently discovered survival mechanism."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the liquid component of the cytoplasm called?",options:["A) Cell sap","B) Matrix","C) Cytosol","D) Stroma"],correct:"C) Cytosol"},
+      {type:"mcq",question:"Which metabolic process occurs specifically in the cytosol?",options:["A) Krebs cycle","B) Oxidative phosphorylation","C) Glycolysis","D) Beta-oxidation"],correct:"C) Glycolysis"},
+      {type:"short",question:"What is the cytoskeleton and why is it important?",correct:"The cytoskeleton is a network of protein fibres (microtubules, actin microfilaments, intermediate filaments) that gives the cell its shape, supports organelles, and enables cell movement and division."},
+      {type:"mcq",question:"What is cytoplasmic streaming?",options:["A) Movement of DNA inside the nucleus","B) Circular flow of cytoplasm distributing molecules around the cell","C) Movement of ions across the membrane","D) Transport of vesicles to the Golgi"],correct:"B) Circular flow of cytoplasm distributing molecules around the cell"},
+      {type:"short",question:"How does the cytoplasm differ between prokaryotic and eukaryotic cells?",correct:"In eukaryotes, cytoplasm fills the space between the membrane and nuclear envelope and contains membrane-bound organelles. In prokaryotes, it fills the entire cell and contains DNA directly (no separate nucleus)."}
+    ]
+  },
+  centrosome:{
+    name:"Centrosome", found_in:["animal"],
+    stats:[{val:"2",lbl:"Centrioles"},{val:"9 triplets",lbl:"Microtubule Set"},{val:"Duplicates",lbl:"Before Division"}],
+    fun_fact:"Sperm cells contribute the centrosome during fertilisation — the egg cell lacks a functional centrosome. This means your centrosomes are all descended from a centrosome inherited from your father, not your mother!",
+    info:[
+      "The centrosome is a small but critically important organelle found mainly in animal cells. It serves as the primary microtubule-organising centre (MTOC) of the cell and plays an essential role in cell division.",
+      "A centrosome consists of two cylindrical structures called centrioles, positioned at right angles to each other. Each centriole is built from nine sets of triplet microtubules arranged in a barrel shape. They are surrounded by the pericentriolar material (PCM), a protein cloud.",
+      "The PCM is critical because it nucleates (starts the growth of) new microtubules. It contains proteins like γ-tubulin that serve as templates for microtubule polymerisation — the centrosome acts as a hub from which microtubules radiate outward.",
+      "Before cell division, the centrosome duplicates. During mitosis, the two daughter centrosomes migrate to opposite poles of the cell, where they organise the bipolar mitotic spindle — the dynamic array of microtubules that captures chromosomes and pulls them apart.",
+      "The centrosome also organises the interphase cytoskeleton, coordinating cell shape, polarity, and intracellular transport. Microtubules radiating from the centrosome serve as tracks along which motor proteins (kinesins and dyneins) carry vesicles and organelles.",
+      "Centrioles are structurally related to basal bodies, which anchor cilia and flagella at the cell surface. A centriole can transform into a basal body to nucleate a cilium, and vice versa, highlighting the close evolutionary relationship between these structures.",
+      "Think of the centrosome as the project manager of cell division — it does not divide chromosomes directly, but organises and supervises the entire infrastructure (mitotic spindle) that ensures chromosomes are correctly segregated to daughter cells.",
+      "Centrosome abnormalities are strongly linked to cancer. Many tumour cells have extra centrosomes, causing multipolar spindles and abnormal chromosome segregation — contributing to the chromosomal instability that drives cancer progression."
+    ],
+    quiz:[
+      {type:"mcq",question:"What are the two cylinder-shaped structures inside a centrosome?",options:["A) Flagella","B) Centrioles","C) Cristae","D) Nucleosomes"],correct:"B) Centrioles"},
+      {type:"mcq",question:"What structure does the centrosome organise during cell division?",options:["A) Nuclear envelope","B) Cell membrane","C) Mitotic spindle","D) Tonoplast"],correct:"C) Mitotic spindle"},
+      {type:"short",question:"What is the pericentriolar material (PCM) and what does it do?",correct:"The PCM is a protein cloud surrounding the centrioles that nucleates new microtubule growth, allowing the centrosome to act as the cell's microtubule-organising centre."},
+      {type:"mcq",question:"Which cells typically lack centrosomes?",options:["A) Nerve cells","B) Liver cells","C) Most mature plant cells","D) Muscle cells"],correct:"C) Most mature plant cells"},
+      {type:"short",question:"Why are extra centrosomes dangerous in cancer cells?",correct:"Extra centrosomes create multipolar spindles during division, causing incorrect chromosome segregation (aneuploidy) — a key driver of cancer progression."}
+    ]
+  },
+  nucleolus:{
+    name:"Nucleolus", found_in:["animal","plant"],
+    stats:[{val:"1–5µm",lbl:"Diameter"},{val:"No",lbl:"Membrane"},{val:"rRNA",lbl:"Produces"}],
+    fun_fact:"The nucleolus is not enclosed by any membrane — it simply condenses and dissolves as needed. During mitosis, the nucleolus completely disappears and then reappears after division is complete!",
+    info:[
+      "The nucleolus is a dense, rounded structure found inside the nucleus of eukaryotic cells. It is the largest sub-nuclear body and is the exclusive site of ribosome biogenesis — the construction of ribosomal subunits.",
+      "Unusually, the nucleolus has no bounding membrane of its own. It forms and is maintained by the gathering of specific DNA sequences called nucleolar organiser regions (NORs), which reside on particular chromosomes (in humans, chromosomes 13, 14, 15, 21, and 22).",
+      "The nucleolus has three morphologically distinct zones: the fibrillar centre (where rRNA genes are transcribed), the dense fibrillar component (where early rRNA processing occurs), and the granular component (where ribosomal proteins assemble with the processed rRNA).",
+      "The nucleolus actively transcribes ribosomal RNA (rRNA) genes, producing the rRNA molecules needed for both ribosomal subunits. These rRNA molecules are combined with ribosomal proteins (transported in from the cytoplasm) to assemble the large and small ribosomal subunits.",
+      "The completed ribosomal subunits are then exported through nuclear pores into the cytoplasm, where they unite to form mature ribosomes capable of synthesising proteins. The nucleolus is essentially the cell's ribosome factory.",
+      "The size and activity of the nucleolus reflects the cell's overall level of protein synthesis. Rapidly growing cells — especially cancer cells and embryonic cells — have large, hyperactive nucleoli. Inactive cells have small, quiescent nucleoli.",
+      "Think of the nucleolus as a specialised factory within the head office (nucleus). Its sole product is ribosome subunits, which are then exported to the shop floor (cytoplasm) to perform the actual manufacturing work (protein synthesis).",
+      "Because cancer cells have abnormally large nucleoli due to their rapid protein production demands, pathologists routinely examine nucleolar size under the microscope as a diagnostic indicator of malignancy and tumour aggressiveness."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the main product of the nucleolus?",options:["A) DNA","B) mRNA","C) Ribosomal subunits","D) Lipids"],correct:"C) Ribosomal subunits"},
+      {type:"mcq",question:"Does the nucleolus have a membrane?",options:["A) Yes, a double membrane","B) Yes, a single membrane","C) No — it has no membrane","D) Only in animal cells"],correct:"C) No — it has no membrane"},
+      {type:"short",question:"What happens to the nucleolus during cell division?",correct:"The nucleolus disappears completely as chromosomes condense at the start of mitosis, then reforms in the daughter nuclei once division is complete."},
+      {type:"mcq",question:"Where does the nucleolus export ribosomal subunits?",options:["A) To the Golgi","B) Into the cytoplasm via nuclear pores","C) To the mitochondria","D) To the cell membrane"],correct:"B) Into the cytoplasm via nuclear pores"},
+      {type:"short",question:"Why do cancer cells typically have abnormally large nucleoli?",correct:"Cancer cells grow and divide rapidly, requiring massive amounts of proteins. Their nucleoli are enlarged and overactive, producing extra ribosomes to support this increased demand."}
+    ]
+  },
+  peroxisome:{
+    name:"Peroxisome", found_in:["animal","plant"],
+    stats:[{val:"0.1–1µm",lbl:"Diameter"},{val:"Catalase",lbl:"Key Enzyme"},{val:"H₂O₂",lbl:"By-product"}],
+    fun_fact:"Catalase — the main enzyme in peroxisomes — is one of the fastest enzymes known. A single catalase molecule can decompose over 40 million molecules of hydrogen peroxide per second, making it a record-holder in biochemistry!",
+    info:[
+      "Peroxisomes are small, spherical, membrane-bound organelles found in virtually all eukaryotic cells. They are named after hydrogen peroxide (H₂O₂) — a toxic reactive oxygen species that they both generate and rapidly destroy as part of their normal biochemistry.",
+      "Each peroxisome is enclosed by a single membrane and contains a dense protein matrix. In many species, a crystalline core (the nucleoid) can be seen by electron microscopy; this is made of dense packing of the enzyme urate oxidase or catalase.",
+      "Peroxisomes carry out beta-oxidation of fatty acids — the same process that mitochondria perform, but specialising in very long chain fatty acids (VLCFAs) that mitochondria cannot handle. The products feed into mitochondrial metabolism.",
+      "They are also major sites of cellular detoxification. Liver and kidney peroxisomes are particularly active in oxidising alcohol, drugs, and other harmful chemicals using oxidase enzymes — producing H₂O₂ as a by-product.",
+      "The H₂O₂ produced is immediately and efficiently decomposed by catalase (one of the fastest enzymes known) into harmless water and oxygen: 2H₂O₂ → 2H₂O + O₂. This built-in safety mechanism prevents oxidative damage.",
+      "In plant cells, specialised peroxisomes called glyoxysomes are found in germinating seeds. They contain the glyoxylate cycle enzymes that convert stored fats into sugars to fuel the seedling's early growth before it can photosynthesise.",
+      "Think of a peroxisome as a hazardous materials processing unit with its own on-site waste neutralisation. It handles dangerous chemical reactions, generates a toxic intermediate (H₂O₂), but immediately destroys it before it can cause damage.",
+      "Zellweger syndrome and X-linked adrenoleukodystrophy (ALD, depicted in the film 'Lorenzo's Oil') are caused by peroxisome dysfunction. Without functioning peroxisomes, VLCFAs accumulate and cause catastrophic damage to the nervous system."
+    ],
+    quiz:[
+      {type:"mcq",question:"What toxic substance do peroxisomes produce and immediately neutralise?",options:["A) Carbon monoxide","B) Hydrogen peroxide","C) Ammonia","D) Ethanol"],correct:"B) Hydrogen peroxide"},
+      {type:"mcq",question:"What reaction does catalase perform in peroxisomes?",options:["A) Oxidises glucose","B) Synthesises fatty acids","C) Decomposes hydrogen peroxide into water and oxygen","D) Converts CO₂ to glucose"],correct:"C) Decomposes hydrogen peroxide into water and oxygen"},
+      {type:"short",question:"What type of fatty acids do peroxisomes specialise in breaking down?",correct:"Peroxisomes specialise in beta-oxidation of very long chain fatty acids (VLCFAs) that are too long for mitochondria to process."},
+      {type:"mcq",question:"What are glyoxysomes?",options:["A) Animal cell vesicles","B) Specialised plant peroxisomes converting fat to sugar in germinating seeds","C) Chloroplast substructures","D) Lysosome variants"],correct:"B) Specialised plant peroxisomes converting fat to sugar in germinating seeds"},
+      {type:"short",question:"What disease results from peroxisome dysfunction, and why?",correct:"Zellweger syndrome results from non-functional peroxisomes, causing very long chain fatty acids to accumulate and destroy nerve cell myelin sheaths, causing catastrophic neurological damage."}
+    ]
+  },
+  chromatin:{
+    name:"Chromatin", found_in:["animal","plant"],
+    stats:[{val:"2m",lbl:"DNA per Cell"},{val:"146 bp",lbl:"Per Nucleosome"},{val:"10nm",lbl:"Fibre Width"}],
+    fun_fact:"The total DNA in your body, if all 37 trillion cells' chromatin were unravelled and laid end to end, would stretch over 200 billion kilometres — enough to reach the Sun and back 700 times!",
+    info:[
+      "Chromatin is the complex of DNA and proteins found inside the nucleus of eukaryotic cells. It represents the organised, packaged form of the genetic material — the material from which chromosomes are built.",
+      "The fundamental repeating unit of chromatin is the nucleosome: approximately 147 base pairs of DNA wrapped 1.65 times around a histone octamer (eight histone proteins — two each of H2A, H2B, H3, and H4). Nucleosomes are connected by linker DNA associated with histone H1.",
+      "This first level of packaging (the 'beads-on-a-string' structure at 10 nm) is further compacted into a 30 nm chromatin fibre, then into larger loops and coils, eventually reaching the fully condensed chromosome visible under a light microscope during cell division.",
+      "There are two functional states of chromatin. Euchromatin is loosely packed, transcriptionally active, and contains the genes being expressed. Heterochromatin is tightly compacted, mostly transcriptionally silent, and includes repetitive sequences and permanently silenced genes.",
+      "The state of chromatin is dynamically regulated through chemical modifications to histones — including acetylation, methylation, and phosphorylation. These modifications change how tightly DNA is wound and whether gene-reading proteins can access it.",
+      "These histone modifications, along with DNA methylation, form the basis of epigenetics — heritable changes in gene expression that do not involve changes to the DNA sequence itself. Environmental factors, lifestyle, and development all influence epigenetic marks.",
+      "Imagine chromatin as an extremely long garden hose (DNA) that must be stored neatly in a small garden shed (nucleus). The hose is wound around a series of spools (nucleosomes), the spools are coiled into coils (30 nm fibre), and those coils are folded into compact bundles.",
+      "Defects in chromatin organisation and histone modification are central to cancer biology. Mutations in chromatin remodelling complexes are found in many cancers, and histone-modifying enzymes are actively investigated as drug targets."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the fundamental repeating unit of chromatin?",options:["A) Chromosome","B) Codon","C) Nucleosome","D) Chromatid"],correct:"C) Nucleosome"},
+      {type:"mcq",question:"Which type of chromatin contains actively transcribed genes?",options:["A) Heterochromatin","B) Euchromatin","C) Pericentromeric chromatin","D) Telomeric chromatin"],correct:"B) Euchromatin"},
+      {type:"short",question:"How do histone modifications regulate gene expression?",correct:"Chemical modifications to histones (acetylation, methylation) change how tightly DNA is packaged — loose chromatin (euchromatin) allows gene transcription; tight packing (heterochromatin) silences genes."},
+      {type:"mcq",question:"How many histone proteins form the core of a nucleosome?",options:["A) 2","B) 4","C) 6","D) 8"],correct:"D) 8"},
+      {type:"short",question:"What is epigenetics and how does it relate to chromatin?",correct:"Epigenetics studies heritable changes in gene expression without DNA sequence changes. Chromatin modifications (histone marks, DNA methylation) determine which genes are active — and can be passed to daughter cells."}
+    ]
+  },
+  cilia:{
+    name:"Cilia", found_in:["animal"],
+    stats:[{val:"5–10µm",lbl:"Length"},{val:"9+2",lbl:"Axoneme"},{val:"10–20Hz",lbl:"Beat Frequency"}],
+    fun_fact:"The coordinated beating of cilia in your respiratory tract creates a continuous 'mucociliary escalator' — moving a carpet of mucus (and anything trapped in it) upward at about 1 cm per minute, 24 hours a day!",
+    info:[
+      "Cilia are tiny, hair-like cellular projections extending from the surface of eukaryotic cells. They are capable of organised movement and play critical roles in locomotion, fluid movement across cell surfaces, and sensory detection.",
+      "The internal skeleton of each cilium — the axoneme — has a highly conserved structure: nine outer doublet microtubules arranged in a circle around two central single microtubules. This '9+2 arrangement' is found in motile cilia across virtually all animal species.",
+      "Movement is generated by dynein motor proteins attached to the outer doublets. Dynein arms use ATP hydrolysis to walk along adjacent microtubule doublets, causing sliding between adjacent doublets. This sliding is converted into bending motion by nexin links that connect doublets.",
+      "Motile cilia beat in a highly coordinated fashion. In many tissues, adjacent cilia beat in metachronal waves — rippling patterns where the beat of one cilium is slightly offset from its neighbours, like a wave passing through a field of wheat.",
+      "Primary cilia (also called sensory cilia) are non-motile and have a '9+0' axoneme (no central pair). Nearly every non-dividing cell in the human body has one primary cilium projecting from its surface, acting as a cellular antenna that detects chemical, mechanical, and light signals.",
+      "Motile cilia are found on respiratory epithelial cells (moving mucus), oviduct cells (propelling eggs), ependymal cells lining brain ventricles (circulating cerebrospinal fluid), and many single-celled organisms that use cilia for swimming.",
+      "Think of a field of motile cilia as coordinated rowing oars on a galley ship — each oar (cilium) pulls in sequence with its neighbours, propelling the fluid (or the cell itself) efficiently through the water. Uncoordinated oars go nowhere.",
+      "Primary ciliary dyskinesia (PCD), caused by mutations in dynein arm components, leads to cilia that beat abnormally or not at all. Consequences include chronic respiratory infections (mucus stagnates), bronchiectasis, male infertility, and in 50% of cases, situs inversus (left-right body organ reversal)."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the microtubule arrangement in a motile cilium's axoneme?",options:["A) 9+0","B) 7+2","C) 9+2","D) 6+3"],correct:"C) 9+2"},
+      {type:"mcq",question:"What motor protein drives ciliary movement?",options:["A) Kinesin","B) Myosin","C) Dynein","D) Actin"],correct:"C) Dynein"},
+      {type:"short",question:"What is the difference between motile and primary (sensory) cilia?",correct:"Motile cilia have a 9+2 axoneme and beat to move fluids; primary cilia have a 9+0 axoneme, are non-motile, and act as sensory antennas for detecting signals."},
+      {type:"mcq",question:"What is the 'mucociliary escalator'?",options:["A) A mucus-producing gland","B) The coordinated ciliary movement that propels mucus up and out of the respiratory tract","C) A type of ciliary disease","D) A drug delivery system"],correct:"B) The coordinated ciliary movement that propels mucus up and out of the respiratory tract"},
+      {type:"short",question:"What are the consequences of primary ciliary dyskinesia?",correct:"PCD causes chronic respiratory infections (mucus not cleared), bronchiectasis, male infertility (sperm can't swim), and often situs inversus (organs on the wrong side of the body)."}
+    ]
+  },
+  flagella:{
+    name:"Flagella", found_in:["animal","plant"],
+    stats:[{val:"50–200µm",lbl:"Length"},{val:"9+2",lbl:"Axoneme"},{val:"~3mm/min",lbl:"Sperm Speed"}],
+    fun_fact:"Bacterial flagella rotate like a ship's propeller at up to 100,000 RPM — making them the fastest biological rotary motors ever discovered. They are powered entirely by a flow of protons (not ATP directly)!",
+    info:[
+      "Flagella are long, whip-like appendages that extend from cells and are used primarily for locomotion. They are found in both eukaryotes (sperm cells, algae, protists) and prokaryotes (bacteria), but their structure and mechanism are completely different in the two domains.",
+      "Eukaryotic flagella share the same internal '9+2' microtubule axoneme structure as motile cilia — nine outer doublets plus two central singles. They are simply longer than cilia (typically 10–200 µm vs. 5–10 µm for cilia) and usually fewer in number (often just one per cell).",
+      "Eukaryotic flagella move by propagating sinusoidal (wave-like) bends along their length from base to tip, driven by dynein motors along the microtubule doublets. This whip-like motion generates thrust that propels the cell forward.",
+      "The human sperm flagellum is the most familiar example of a eukaryotic flagellum. The single tail propels the sperm at approximately 3 mm/minute through the female reproductive tract. The flagellum's base (midpiece) is wrapped in mitochondria that supply ATP for dynein.",
+      "Prokaryotic flagella are structurally and evolutionarily entirely different. They are made of a protein called flagellin (not tubulin/dynein), are hollow, and rotate via a basal body motor embedded in the bacterial cell envelope — powered by the proton-motive force (proton gradient).",
+      "Prokaryotic flagellar arrangements vary: monotrichous (one flagellum at one end), lophotrichous (tuft at one end), amphitrichous (flagella at both ends), and peritrichous (flagella all around the cell, as in E. coli).",
+      "Eukaryotic flagella move like a whip or an eel — sinusoidal waves travel down the length. Bacterial flagella spin like a boat propeller. Both achieve swimming, but the underlying mechanism is fundamentally different.",
+      "Defective eukaryotic flagella in sperm cells cause male infertility, as sperm cannot swim to reach the egg. In primary ciliary dyskinesia, the same dynein arm defects that impair cilia also impair sperm flagella, causing both respiratory problems and infertility."
+    ],
+    quiz:[
+      {type:"mcq",question:"How do eukaryotic flagella move compared to bacterial flagella?",options:["A) Both rotate","B) Eukaryotic flagella undulate in waves; bacterial flagella rotate like a propeller","C) Both undulate","D) Bacterial flagella undulate; eukaryotic flagella rotate"],correct:"B) Eukaryotic flagella undulate in waves; bacterial flagella rotate like a propeller"},
+      {type:"mcq",question:"What protein makes up bacterial flagella?",options:["A) Tubulin","B) Actin","C) Flagellin","D) Dynein"],correct:"C) Flagellin"},
+      {type:"short",question:"What energy source powers bacterial flagellar rotation?",correct:"Bacterial flagella are powered by the proton-motive force — a gradient of protons across the bacterial cell membrane — not directly by ATP hydrolysis."},
+      {type:"mcq",question:"What is the axoneme arrangement in a eukaryotic flagellum?",options:["A) 9+0","B) 8+1","C) 9+2","D) 6+2"],correct:"C) 9+2"},
+      {type:"short",question:"Why do defective flagella cause male infertility?",correct:"Sperm cells need their flagellum to swim through the female reproductive tract. Defective flagella cannot generate proper movement, preventing sperm from reaching and fertilising the egg."}
+    ]
+  },
+  vesicle:{
+    name:"Vesicle", found_in:["animal","plant"],
+    stats:[{val:"30–100nm",lbl:"Diameter"},{val:"Lipid Bilayer",lbl:"Membrane"},{val:"All Cells",lbl:"Found in"}],
+    fun_fact:"Synaptic vesicles in your brain neurons contain a precise quantum of about 5,000–10,000 neurotransmitter molecules each. Every thought, emotion, or sensation you have depends on millions of these tiny vesicles fusing with membranes every second!",
+    info:[
+      "Vesicles are small, spherical, membrane-bound sacs found in all eukaryotic cells. They are the cell's universal packaging and transport containers, carrying molecular cargo between different cellular compartments, to the cell surface, or into the cell from outside.",
+      "Like the cell membrane, the vesicle wall is a phospholipid bilayer — this shared composition allows vesicles to fuse seamlessly with other membranes (ER, Golgi, plasma membrane, lysosomes), either delivering their contents or incorporating new membrane material.",
+      "Vesicles come in many specialised types. Transport vesicles carry proteins from the ER to the Golgi and then from the Golgi to their destinations. Secretory vesicles deliver materials to the cell surface for release. Endocytic vesicles bring material in from outside the cell.",
+      "Exocytosis is the process by which vesicles fuse with the plasma membrane and release their contents to the outside. This is how cells secrete hormones (insulin from pancreatic cells), neurotransmitters (from nerve terminals), enzymes (from digestive glands), and mucus.",
+      "Endocytosis is the reverse — the plasma membrane folds inward around extracellular material, pinches off, and forms an endocytic vesicle inside the cell. Phagocytosis (engulfing large particles), pinocytosis (taking up liquid), and receptor-mediated endocytosis are all forms.",
+      "The formation of coated vesicles is tightly controlled. COPI and COPII protein coats are used for transport between the ER and Golgi. Clathrin coats are used for endocytosis. These coat proteins help select cargo and curve the membrane to form a vesicle.",
+      "Think of vesicles as the couriers and delivery vans of the cell — constantly picking up packages (molecules) from one location, travelling through the cytoplasm along microtubule highways, and delivering them precisely to their correct destinations.",
+      "Synaptic vesicles are a specialised type in neurons, storing neurotransmitters and releasing them into the synapse upon nerve stimulation — enabling all nerve signalling in the brain. Dysregulation of synaptic vesicle release is implicated in neurological disorders."
+    ],
+    quiz:[
+      {type:"mcq",question:"What is the process called when vesicles release contents outside the cell?",options:["A) Endocytosis","B) Exocytosis","C) Phagocytosis","D) Osmosis"],correct:"B) Exocytosis"},
+      {type:"mcq",question:"What coat protein is used in endocytic vesicle formation?",options:["A) Actin","B) Tubulin","C) Clathrin","D) Flagellin"],correct:"C) Clathrin"},
+      {type:"short",question:"Why is it important that vesicles are made of the same phospholipid bilayer as other membranes?",correct:"The shared lipid bilayer composition allows vesicles to fuse seamlessly with other membranes — enabling them to deliver contents or incorporate into the target membrane."},
+      {type:"mcq",question:"Which organelles produce transport vesicles?",options:["A) Mitochondria and nucleus","B) ER and Golgi apparatus","C) Ribosomes and centrosomes","D) Chloroplasts and lysosomes"],correct:"B) ER and Golgi apparatus"},
+      {type:"short",question:"What are synaptic vesicles and why are they essential?",correct:"Synaptic vesicles store neurotransmitters in nerve terminals and release them into synapses when a nerve impulse arrives, enabling all nerve-to-nerve and nerve-to-muscle communication."}
+    ]
+  },
+  "endoplasmic reticulum":{
+    name:"Endoplasmic Reticulum", found_in:["animal","plant"],
+    stats:[{val:"Rough+Smooth",lbl:"Types"},{val:"~50%",lbl:"Cell Membrane"},{val:"Huge",lbl:"Surface Area"}],
+    fun_fact:"If you flattened out all the membrane of the endoplasmic reticulum in a single liver cell, its total surface area would be roughly 30–40 times larger than the plasma membrane of the same cell!",
+    info:[
+      "The endoplasmic reticulum (ER) is a vast, interconnected network of membrane-bound tubules, sheets, and flattened sacs (cisternae) that occupies a large portion of the eukaryotic cell's volume. It is continuous with the outer nuclear envelope and connected to the Golgi apparatus.",
+      "There are two functionally distinct types of ER. Rough ER is studded on its outer surface with ribosomes, giving it a 'rough' or granular appearance under the electron microscope. Smooth ER lacks ribosomes and appears smooth.",
+      "The rough ER specialises in protein biosynthesis and processing. Ribosomes on its surface synthesise proteins that are co-translationally inserted into the ER lumen, where they are folded, quality-checked, and chemically modified (e.g., N-linked glycosylation).",
+      "Misfolded proteins in the ER lumen are detected by a quality control system and either refolded or targeted for proteasomal degradation through ER-associated degradation (ERAD). Excessive misfolded proteins trigger the unfolded protein response (UPR), a cellular stress response.",
+      "Smooth ER has several specialised functions depending on the cell type. In liver cells, it contains enzymes that detoxify drugs and lipid-soluble toxins. In muscle cells (called sarcoplasmic reticulum), it stores and releases calcium ions that trigger muscle contraction.",
+      "Both types of ER serve as the major site of lipid synthesis, including phospholipids (membrane components) and steroids. The steroid hormones (oestrogen, testosterone, cortisol) are synthesised in the smooth ER of endocrine cells.",
+      "Think of the ER as a combined highway system and manufacturing/processing district. The rough ER is the protein manufacturing plant, the smooth ER is the chemical processing facility, and transport vesicles are the lorries carrying finished goods to the Golgi distribution centre.",
+      "ER dysfunction underlies multiple diseases. In cystic fibrosis, the CFTR protein misfolds in the ER and is destroyed. Chronic ER stress is implicated in type 2 diabetes, Parkinson's disease, Alzheimer's disease, and many cancers."
+    ],
+    quiz:[
+      {type:"mcq",question:"What gives rough ER its rough, granular appearance?",options:["A) Calcium deposits","B) Ribosomes on its outer surface","C) Membrane folds","D) Cholesterol crystals"],correct:"B) Ribosomes on its outer surface"},
+      {type:"mcq",question:"What is the function of smooth ER in liver cells?",options:["A) Protein synthesis","B) DNA replication","C) Detoxification of drugs and lipid-soluble toxins","D) Photosynthesis"],correct:"C) Detoxification of drugs and lipid-soluble toxins"},
+      {type:"short",question:"What is the unfolded protein response (UPR)?",correct:"The UPR is a cellular stress response triggered when too many misfolded proteins accumulate in the ER. It upregulates chaperones, slows protein synthesis, and activates degradation pathways to restore balance."},
+      {type:"mcq",question:"What is the sarcoplasmic reticulum?",options:["A) Rough ER in nerve cells","B) Specialised smooth ER in muscle cells that stores and releases calcium","C) A type of Golgi apparatus","D) ER found only in plant cells"],correct:"B) Specialised smooth ER in muscle cells that stores and releases calcium"},
+      {type:"short",question:"How are the rough ER and Golgi apparatus functionally connected?",correct:"Proteins made on rough ER ribosomes are packaged into COPII vesicles that bud off and fuse with the Golgi cis face for further processing, modification, and sorting."}
+    ]
+  }
+};
+
+// ── CHIP SETUP ────────────────────────────────────────────────────────────────
+const names = ["Nucleus","Mitochondria","Ribosome","Endoplasmic Reticulum","Golgi Apparatus","Lysosome","Vacuole","Cell Membrane","Cell Wall","Cytoplasm","Centrosome","Chloroplast","Peroxisome","Cilia","Flagella","Vesicle","Nucleolus","Chromatin"];
+const chipsWrap = document.getElementById('chipsWrap');
+names.forEach(n => {
+  const c = document.createElement('div'); c.className = 'chip'; c.textContent = n;
+  c.id = 'chip_' + n.toLowerCase().replace(/ /g,'_');
+  c.onclick = () => { document.getElementById('searchInput').value = n; explore(); };
+  chipsWrap.appendChild(c);
+});
+document.getElementById('searchInput').addEventListener('keydown', e => { if(e.key==='Enter') explore(); });
+
+let quizAnswers=[], quizScore=0, answeredCount=0, activeChip=null;
+
+function lookup(input) {
+  const clean = input.trim().toLowerCase();
+  if(DB[clean]) return DB[clean];
+  if(ALIASES[clean] && DB[ALIASES[clean]]) return DB[ALIASES[clean]];
+  for(const k of Object.keys(DB)) { if(k.includes(clean)||clean.includes(k)) return DB[k]; }
+  return null;
+}
+
+function explore() {
+  const val = document.getElementById('searchInput').value.trim();
+  if(!val) return;
+  document.getElementById('resultArea').classList.remove('visible');
+  document.getElementById('errorBox').classList.remove('visible');
+  quizScore=0; answeredCount=0;
+
+  // update chip highlight
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  const data = lookup(val);
+  if(data) {
+    const chipId = 'chip_' + data.name.toLowerCase().replace(/ /g,'_');
+    const chip = document.getElementById(chipId);
+    if(chip) chip.classList.add('active');
+  }
+
+  document.getElementById('loading').classList.add('visible');
+  setTimeout(() => {
+    document.getElementById('loading').classList.remove('visible');
+    if(!data) {
+      const eb = document.getElementById('errorBox');
+      eb.textContent = "⚠️ '" + val + "' is not a recognised cell organelle. Please try one of the organelles shown above!";
+      eb.classList.add('visible'); return;
+    }
+    render(data);
+  }, 350);
+}
+
+function render(d) {
+  const key = d.name.toLowerCase();
+  const imgData = IMAGES[key] || IMAGES["cell membrane"];
+
+  // Image
+  const imgEl = document.getElementById('orgImage');
+  imgEl.src = imgData.url;
+  imgEl.alt = imgData.caption;
+  document.getElementById('imgBadge').textContent = imgData.badge;
+  document.getElementById('imgCaption').textContent = imgData.caption;
+  document.getElementById('imgSource').href = imgData.source;
+
+  // Header
+  document.getElementById('rName').textContent = d.name;
+  const tagsEl = document.getElementById('rTags'); tagsEl.innerHTML='';
+  const tagMap = {animal:'Animal Cell',plant:'Plant Cell',both:'Both Cells',prokaryote:'Prokaryote'};
+  (d.found_in||[]).forEach(f=>{
+    const t=document.createElement('span'); t.className='otag '+f; t.textContent=tagMap[f]||f; tagsEl.appendChild(t);
+  });
+
+  // Stats
+  const statsEl = document.getElementById('rStats'); statsEl.innerHTML='';
+  (d.stats||[]).forEach(s=>{
+    const item=document.createElement('div'); item.className='stat-item';
+    item.innerHTML=`<span class="stat-val">${s.val}</span><span class="stat-lbl">${s.lbl}</span>`;
+    statsEl.appendChild(item);
+  });
+
+  // Fun fact
+  document.getElementById('rFunFact').textContent = d.fun_fact||'';
+
+  // Info
+  const grid = document.getElementById('rInfoGrid'); grid.innerHTML='';
+  const labels=['Introduction','Structure','Internal Components','Primary Function','Secondary Role','Location','Real-life Analogy','Importance'];
+  (d.info||[]).forEach((p,i)=>{
+    const div=document.createElement('div'); div.className='info-para';
+    div.innerHTML=`<div class="info-para-num">${String(i+1).padStart(2,'0')} — ${labels[i]||''}</div><p>${p}</p>`;
+    grid.appendChild(div);
+  });
+  if((d.info||[]).length%2!==0){const pad=document.createElement('div');pad.className='info-para';grid.appendChild(pad);}
+
+  // Quiz reset
+  quizAnswers=[]; quizScore=0; answeredCount=0;
+  document.getElementById('scorePill').classList.remove('visible');
+  document.getElementById('scoreBarWrap').classList.remove('visible');
+  document.getElementById('scoreBarFill').style.width='0%';
+  document.getElementById('answersBox').classList.remove('visible');
+  document.getElementById('answersToggleBtn').textContent='Show all answers';
+
+  const qc = document.getElementById('quizContainer'); qc.innerHTML='';
+  const ansList=[];
+
+  (d.quiz||[]).forEach((q,idx)=>{
+    quizAnswers.push(q.correct);
+    ansList.push(`<div class="ans-item"><span class="ans-num">Q${idx+1}</span><span>${q.correct}</span></div>`);
+    const qDiv=document.createElement('div'); qDiv.className='quiz-q';
+    qDiv.innerHTML=`<div class="q-meta"><span class="q-num">Q${idx+1}</span><span class="q-type-badge">${q.type==='mcq'?'Multiple choice':'Short answer'}</span></div><div class="q-text">${q.question}</div>`;
+
+    if(q.type==='mcq'){
+      const od=document.createElement('div'); od.className='options';
+      ['A','B','C','D'].forEach((ltr,oi)=>{
+        const btn=document.createElement('div'); btn.className='opt';
+        btn.innerHTML=`<div class="opt-letter">${ltr}</div><span>${q.options[oi]}</span>`;
+        btn.onclick=()=>{
+          if(od.dataset.done)return; od.dataset.done='1';
+          qDiv.classList.add('answered');
+          Array.from(od.children).forEach(b=>{
+            b.setAttribute('data-locked','1');
+            if(b.querySelector('span').textContent===q.correct) b.classList.add('correct');
+            else if(b===btn) b.classList.add('wrong');
+          });
+          if(q.options[oi]===q.correct) quizScore++;
+          answeredCount++; updateScore(quizAnswers.length);
+        };
+        od.appendChild(btn);
+      });
+      qDiv.appendChild(od);
+    } else {
+      const row=document.createElement('div'); row.className='short-row';
+      const inp=document.createElement('input'); inp.type='text'; inp.className='short-input'; inp.placeholder='Type your answer here...';
+      const btn=document.createElement('button'); btn.className='check-btn'; btn.textContent='Check';
+      const fb=document.createElement('div'); fb.className='q-feedback';
+      btn.onclick=()=>{
+        if(btn.dataset.done)return; btn.dataset.done='1'; inp.disabled=true; btn.disabled=true;
+        qDiv.classList.add('answered');
+        const ua=inp.value.trim().toLowerCase();
+        const cw=q.correct.toLowerCase().split(/\s+/).filter(w=>w.length>3);
+        const hit=cw.some(w=>ua.includes(w));
+        if(ua.length>2&&hit){fb.textContent='✓ Correct! Full answer: '+q.correct; fb.className='q-feedback visible ok'; quizScore++;}
+        else{fb.textContent='✗ Answer: '+q.correct; fb.className='q-feedback visible no';}
+        answeredCount++; updateScore(quizAnswers.length);
+      };
+      inp.addEventListener('keydown',e=>{if(e.key==='Enter')btn.click();});
+      row.appendChild(inp); row.appendChild(btn); qDiv.appendChild(row); qDiv.appendChild(fb);
+    }
+    qc.appendChild(qDiv);
+  });
+
+  document.getElementById('answersBox').innerHTML = ansList.join('');
+  document.getElementById('resultArea').classList.add('visible');
+  document.getElementById('resultArea').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function updateScore(total){
+  if(answeredCount>=total){
+    const pct=Math.round((quizScore/total)*100);
+    document.getElementById('scorePill').textContent=`Score: ${quizScore}/${total} (${pct}%)`;
+    document.getElementById('scorePill').classList.add('visible');
+    document.getElementById('scoreBarFill').style.width=pct+'%';
+    document.getElementById('scoreBarWrap').classList.add('visible');
+  }
+}
+function toggleAnswers(){
+  const b=document.getElementById('answersBox'); b.classList.toggle('visible');
+  document.getElementById('answersToggleBtn').textContent=b.classList.contains('visible')?'Hide answers':'Show all answers';
+}
+</script>
+</body>
+</html>
